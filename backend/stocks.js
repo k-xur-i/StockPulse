@@ -1,38 +1,21 @@
 const express = require('express');
 const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
 
 const router = express.Router();
 
-const CACHE_DIR = path.join(__dirname, 'cache');
-if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR);
-
-function readCache(file) {
-  const filePath = path.join(CACHE_DIR, file);
-  if (!fs.existsSync(filePath)) return null;
-  const stat = fs.statSync(filePath);
-  const ageMinutes = (Date.now() - stat.mtimeMs) / 60000;
-  // Chart cache valid for 24 hours, price cache valid for 15 minutes
-  const maxAge = file.includes('chart') ? 1440 : 15;
-  if (ageMinutes > maxAge) return null;
-  return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-}
-
-function writeCache(file, data) {
-  fs.writeFileSync(path.join(CACHE_DIR, file), JSON.stringify(data));
-}
+const chartCache = {};
+const priceCache = {};
+const CHART_TTL = 24 * 60 * 60 * 1000; // 24 hours
+const PRICE_TTL = 15 * 60 * 1000; // 15 minutes
 
 // GET /api/stocks/:symbol/chart  (MUST come before /:symbol)
 router.get('/:symbol/chart', async (req, res) => {
   try {
     const { symbol } = req.params;
-    const cacheFile = `${symbol}_chart.json`;
+    const cached = chartCache[symbol];
 
-    const cached = readCache(cacheFile);
-    if (cached) {
-      console.log(`Using cached chart for ${symbol}`);
-      return res.json(cached);
+    if (cached && Date.now() - cached.timestamp < CHART_TTL) {
+      return res.json(cached.data);
     }
 
     const response = await axios.get(
@@ -42,7 +25,6 @@ router.get('/:symbol/chart', async (req, res) => {
     const timeSeries = response.data['Time Series (Daily)'];
 
     if (!timeSeries) {
-      console.log('API response:', response.data);
       return res.status(404).json({ error: 'Stock data not found', apiMessage: response.data });
     }
 
@@ -57,7 +39,7 @@ router.get('/:symbol/chart', async (req, res) => {
         close: parseFloat(data['4. close']),
       }));
 
-    writeCache(cacheFile, chartData);
+    chartCache[symbol] = { data: chartData, timestamp: Date.now() };
     res.json(chartData);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -68,12 +50,10 @@ router.get('/:symbol/chart', async (req, res) => {
 router.get('/:symbol', async (req, res) => {
   try {
     const { symbol } = req.params;
-    const cacheFile = `${symbol}_price.json`;
+    const cached = priceCache[symbol];
 
-    const cached = readCache(cacheFile);
-    if (cached) {
-      console.log(`Using cached price for ${symbol}`);
-      return res.json(cached);
+    if (cached && Date.now() - cached.timestamp < PRICE_TTL) {
+      return res.json(cached.data);
     }
 
     const response = await axios.get(
@@ -82,7 +62,6 @@ router.get('/:symbol', async (req, res) => {
     const data = response.data['Global Quote'];
 
     if (!data || !data['01. symbol']) {
-      console.log('API response:', response.data);
       return res.status(404).json({ error: 'Stock data not found', apiMessage: response.data });
     }
 
@@ -96,7 +75,7 @@ router.get('/:symbol', async (req, res) => {
       volume: data['06. volume']
     };
 
-    writeCache(cacheFile, result);
+    priceCache[symbol] = { data: result, timestamp: Date.now() };
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
