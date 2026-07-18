@@ -26,7 +26,7 @@ const pool = new Pool({
 });
 
 // Export pool BEFORE requiring routes
-module.exports = { pool };
+module.exports = { pool, app };
 
 // NOW require routes (after pool is exported)
 const authRoutes = require('./auth');
@@ -156,6 +156,8 @@ app.get('/api/db-test', async (req, res) => {
 require('./checkAlerts');
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
