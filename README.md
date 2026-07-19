@@ -12,7 +12,6 @@ A full-stack stock market dashboard with live price charts, technical indicators
 ![Express](https://img.shields.io/badge/Express-000000?style=for-the-badge&logo=express&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
 
-**[🔗 Live Demo](https://stock-pulse-backend.vercel.app)**
 
 </div>
 
